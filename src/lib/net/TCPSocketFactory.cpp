@@ -7,6 +7,8 @@
  */
 
 #include "net/TCPSocketFactory.h"
+#include "net/RelayListenSocket.h"
+#include "net/RelaySocket.h"
 #include "net/SecureListenSocket.h"
 #include "net/SecureSocket.h"
 #include "net/TCPListenSocket.h"
@@ -44,4 +46,18 @@ IListenSocket *TCPSocketFactory::createListen(IArchNetwork::AddressFamily family
   }
 
   return socket;
+}
+
+IDataSocket *TCPSocketFactory::createRelay(
+    const std::string &relayHost, int relayPort, const std::string &roomId, IArchNetwork::AddressFamily family
+) const
+{
+  return new RelaySocket(m_events, m_socketMultiplexer, relayHost, relayPort, roomId, family);
+}
+
+IListenSocket *TCPSocketFactory::createRelayListen(
+    const std::string &relayHost, int relayPort, const std::string &roomId, IArchNetwork::AddressFamily family
+) const
+{
+  return new RelayListenSocket(m_events, m_socketMultiplexer, relayHost, relayPort, roomId, family);
 }

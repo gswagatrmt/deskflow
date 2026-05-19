@@ -881,6 +881,207 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="tabInternet">
+      <attribute name="title">
+       <string>&amp;Internet</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_relay">
+       <property name="spacing">
+        <number>9</number>
+       </property>
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>8</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QGroupBox" name="groupRelay">
+         <property name="title">
+          <string>Internet relay (share KVM over the internet)</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+         <property name="objectName">
+          <string>groupRelay</string>
+         </property>
+         <layout class="QFormLayout" name="formRelay">
+          <property name="fieldGrowthPolicy">
+           <enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum>
+          </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="lblRelayHost">
+            <property name="text">
+             <string>Relay server</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="hboxRelayHost">
+            <item>
+             <widget class="QLineEdit" name="lineRelayHost">
+              <property name="placeholderText">
+               <string>relay.deskflow.io</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lblRelayPort">
+              <property name="text">
+               <string>Port</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinRelayPort">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>65535</number>
+              </property>
+              <property name="value">
+               <number>24801</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="lblRelayRoom">
+            <property name="text">
+             <string>Room code</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <layout class="QHBoxLayout" name="hboxRelayRoom">
+            <item>
+             <widget class="QLineEdit" name="lineRelayRoom">
+              <property name="placeholderText">
+               <string>shared-secret-code</string>
+              </property>
+              <property name="toolTip">
+               <string>A shared secret known to all devices in your group. All devices with the same room code will connect to each other.</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnGenerateRoom">
+              <property name="text">
+               <string>Generate</string>
+              </property>
+              <property name="toolTip">
+               <string>Generate a random room code</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="lblRelayMode">
+            <property name="text">
+             <string>This device role</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="comboRelayMode">
+            <item>
+             <property name="text">
+              <string>server (controls other devices)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>client (is controlled by another device)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>peer (bidirectional — both roles simultaneously)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="lblRelayPeerRoom">
+            <property name="text">
+             <string>Reverse room code</string>
+            </property>
+            <property name="toolTip">
+             <string>Room code for the reverse direction in peer mode (other device uses this as their room code in server role)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <layout class="QHBoxLayout" name="hboxPeerRoom">
+            <item>
+             <widget class="QLineEdit" name="lineRelayPeerRoom">
+              <property name="placeholderText">
+               <string>reverse-room-code (peer mode only)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnGeneratePeerRoom">
+              <property name="text">
+               <string>Generate</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lblRelayHelp">
+         <property name="text">
+          <string>&lt;html&gt;&lt;body&gt;
+&lt;b&gt;Internet KVM setup:&lt;/b&gt;
+&lt;ol&gt;
+&lt;li&gt;All devices must use the same relay server and room code.&lt;/li&gt;
+&lt;li&gt;One device is the &lt;i&gt;server&lt;/i&gt; (has the keyboard/mouse); others are &lt;i&gt;clients&lt;/i&gt;.&lt;/li&gt;
+&lt;li&gt;For bidirectional control select &lt;i&gt;peer&lt;/i&gt; on all devices and set both room codes.&lt;/li&gt;
+&lt;li&gt;You can self-host the relay: &lt;tt&gt;node relay/server.js&lt;/tt&gt; in the deskflow directory.&lt;/li&gt;
+&lt;/ol&gt;
+Changes take effect after restarting Deskflow.
+&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="openExternalLinks">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerRelay">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>

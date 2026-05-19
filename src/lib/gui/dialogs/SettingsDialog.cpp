@@ -21,6 +21,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QUuid>
 
 using namespace deskflow::gui;
 
@@ -142,6 +143,25 @@ void SettingsDialog::initConnections() const
   connect(ui->cbRunExitCommand, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->lineCommandEnter, &QLineEdit::textChanged, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->lineCommandExit, &QLineEdit::textChanged, this, &SettingsDialog::setButtonBoxEnabledButtons);
+
+  // Relay connections
+  connect(ui->groupRelay, &QGroupBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->comboRelayMode, &QComboBox::currentIndexChanged, this, [this](int) {
+    updateRelayControls();
+    setButtonBoxEnabledButtons();
+  });
+  connect(ui->lineRelayHost, &QLineEdit::textChanged, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->lineRelayRoom, &QLineEdit::textChanged, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->lineRelayPeerRoom, &QLineEdit::textChanged, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->spinRelayPort, &QSpinBox::valueChanged, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->btnGenerateRoom, &QPushButton::clicked, this, [this] {
+    const auto uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).left(12);
+    ui->lineRelayRoom->setText(uuid);
+  });
+  connect(ui->btnGeneratePeerRoom, &QPushButton::clicked, this, [this] {
+    const auto uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).left(12);
+    ui->lineRelayPeerRoom->setText(uuid);
+  });
 }
 
 void SettingsDialog::regenCertificates()
@@ -197,6 +217,15 @@ void SettingsDialog::showReadOnlyMessage()
   if (Settings::isWritable())
     return;
   messages::showReadOnlySettings(this, Settings::settingsFile());
+}
+
+void SettingsDialog::updateRelayControls()
+{
+  // The "peer room code" row is only relevant in peer mode (index 2)
+  const bool isPeerMode = (ui->comboRelayMode->currentIndex() == 2);
+  ui->lblRelayPeerRoom->setVisible(isPeerMode);
+  ui->lineRelayPeerRoom->setVisible(isPeerMode);
+  ui->btnGeneratePeerRoom->setVisible(isPeerMode);
 }
 
 void SettingsDialog::updateText()
@@ -256,6 +285,19 @@ void SettingsDialog::accept()
     mode = Settings::ProcessMode::Desktop;
   Settings::setValue(Settings::Core::ProcessMode, mode);
 
+  // Relay / internet settings
+  Settings::setValue(Settings::Relay::Enabled, ui->groupRelay->isChecked());
+  Settings::setValue(Settings::Relay::Host, ui->lineRelayHost->text().trimmed());
+  Settings::setValue(Settings::Relay::Port, ui->spinRelayPort->value());
+  Settings::setValue(Settings::Relay::RoomCode, ui->lineRelayRoom->text().trimmed());
+  Settings::setValue(Settings::Relay::PeerRoomCode, ui->lineRelayPeerRoom->text().trimmed());
+  const QStringList relayModes = {"server", "client", "peer"};
+  const int relayModeIdx = ui->comboRelayMode->currentIndex();
+  Settings::setValue(
+      Settings::Relay::Mode,
+      (relayModeIdx >= 0 && relayModeIdx < relayModes.size()) ? relayModes[relayModeIdx] : "server"
+  );
+
   QDialog::accept();
 }
 
@@ -308,6 +350,23 @@ void SettingsDialog::loadFromConfig()
   } else {
     m_interfaceSetOnLoad = true;
   }
+
+  // Relay / internet settings
+  ui->groupRelay->setChecked(Settings::value(Settings::Relay::Enabled).toBool());
+  ui->lineRelayHost->setText(Settings::value(Settings::Relay::Host).toString());
+  ui->spinRelayPort->setValue(
+      Settings::value(Settings::Relay::Port).toInt() > 0 ? Settings::value(Settings::Relay::Port).toInt()
+                                                         : Settings::Relay::DefaultPort
+  );
+  ui->lineRelayRoom->setText(Settings::value(Settings::Relay::RoomCode).toString());
+  ui->lineRelayPeerRoom->setText(Settings::value(Settings::Relay::PeerRoomCode).toString());
+  {
+    const QString relayMode = Settings::value(Settings::Relay::Mode).toString();
+    const QStringList relayModes = {"server", "client", "peer"};
+    const int idx = relayModes.indexOf(relayMode);
+    ui->comboRelayMode->setCurrentIndex(idx >= 0 ? idx : 0);
+  }
+  updateRelayControls();
 
   qDebug() << "load from config done";
 

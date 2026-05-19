@@ -43,6 +43,7 @@ private:
   void updateTlsControlsEnabled();
   void showReadOnlyMessage();
   void updateText();
+  void updateRelayControls();
 
   /// @brief Load all settings.
   void loadFromConfig();

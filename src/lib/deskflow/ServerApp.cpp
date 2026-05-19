@@ -21,6 +21,7 @@
 #include "deskflow/ipc/CoreIpc.h"
 #include "net/SocketException.h"
 #include "net/SocketMultiplexer.h"
+#include "net/RelaySocketFactory.h"
 #include "net/TCPSocketFactory.h"
 #include "server/ClientListener.h"
 #include "server/ClientProxy.h"
@@ -480,6 +481,21 @@ void ServerApp::handleScreenSwitched() const
 
 std::unique_ptr<ISocketFactory> ServerApp::getSocketFactory() const
 {
+  const bool relayEnabled = Settings::value(Settings::Relay::Enabled).toBool();
+  const QString relayMode = Settings::value(Settings::Relay::Mode).toString();
+
+  if (relayEnabled && (relayMode == "server" || relayMode == "peer")) {
+    const std::string relayHost = Settings::value(Settings::Relay::Host).toString().toStdString();
+    const int relayPort = Settings::value(Settings::Relay::Port).toInt();
+    const std::string roomCode = Settings::value(Settings::Relay::RoomCode).toString().toStdString();
+
+    if (!relayHost.empty() && !roomCode.empty()) {
+      LOG_NOTE("using relay socket factory (host=%s port=%d room=%s)", relayHost.c_str(), relayPort, roomCode.c_str());
+      return std::make_unique<RelaySocketFactory>(getEvents(), getSocketMultiplexer(), relayHost, relayPort, roomCode);
+    }
+    LOG_WARN("relay mode enabled but host or room code is empty; falling back to direct connection");
+  }
+
   return std::make_unique<TCPSocketFactory>(getEvents(), getSocketMultiplexer());
 }
 

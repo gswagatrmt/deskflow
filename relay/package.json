@@ -1,0 +1,15 @@
+{
+  "name": "deskflow-relay",
+  "version": "1.0.0",
+  "description": "Internet relay server and proxy for Deskflow — enables cross-internet KVM sharing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:admin": "RELAY_ADMIN_PORT=8080 node server.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": ["deskflow", "relay", "kvm", "internet"],
+  "license": "GPL-2.0-only"
+}

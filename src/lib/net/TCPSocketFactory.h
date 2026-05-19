@@ -11,6 +11,9 @@
 #include "arch/IArchNetwork.h"
 #include "net/ISocketFactory.h"
 
+#include <QString>
+#include <string>
+
 class IEventQueue;
 class SocketMultiplexer;
 
@@ -30,6 +33,18 @@ public:
       IArchNetwork::AddressFamily family = IArchNetwork::AddressFamily::INet,
       SecurityLevel securityLevel = SecurityLevel::PlainText
   ) const override;
+
+  /// Create a client-side data socket that connects through a relay server.
+  IDataSocket *createRelay(
+      const std::string &relayHost, int relayPort, const std::string &roomId,
+      IArchNetwork::AddressFamily family = IArchNetwork::AddressFamily::INet
+  ) const;
+
+  /// Create a server-side listen socket that accepts connections through a relay server.
+  IListenSocket *createRelayListen(
+      const std::string &relayHost, int relayPort, const std::string &roomId,
+      IArchNetwork::AddressFamily family = IArchNetwork::AddressFamily::INet
+  ) const;
 
 private:
   IEventQueue *m_events;

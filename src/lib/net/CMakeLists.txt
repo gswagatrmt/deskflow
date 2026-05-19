@@ -26,6 +26,12 @@ add_library(net STATIC
   ISocketMultiplexerJob.h
   NetworkAddress.cpp
   NetworkAddress.h
+  RelayListenSocket.cpp
+  RelayListenSocket.h
+  RelaySocket.cpp
+  RelaySocket.h
+  RelaySocketFactory.cpp
+  RelaySocketFactory.h
   SecureListenSocket.cpp
   SecureListenSocket.h
   SecurityLevel.h

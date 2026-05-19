@@ -21,6 +21,7 @@
 #include "net/NetworkAddress.h"
 #include "net/SocketException.h"
 #include "net/SocketMultiplexer.h"
+#include "net/RelaySocketFactory.h"
 #include "net/TCPSocketFactory.h"
 
 #if defined(Q_OS_WIN)
@@ -384,6 +385,21 @@ void ClientApp::startNode()
 
 ISocketFactory *ClientApp::getSocketFactory() const
 {
+  const bool relayEnabled = Settings::value(Settings::Relay::Enabled).toBool();
+  const QString relayMode = Settings::value(Settings::Relay::Mode).toString();
+
+  if (relayEnabled && (relayMode == "client" || relayMode == "peer")) {
+    const std::string relayHost = Settings::value(Settings::Relay::Host).toString().toStdString();
+    const int relayPort = Settings::value(Settings::Relay::Port).toInt();
+    const std::string roomCode = Settings::value(Settings::Relay::RoomCode).toString().toStdString();
+
+    if (!relayHost.empty() && !roomCode.empty()) {
+      LOG_NOTE("using relay socket factory (host=%s port=%d room=%s)", relayHost.c_str(), relayPort, roomCode.c_str());
+      return new RelaySocketFactory(getEvents(), getSocketMultiplexer(), relayHost, relayPort, roomCode);
+    }
+    LOG_WARN("relay mode enabled but host or room code is empty; falling back to direct connection");
+  }
+
   return new TCPSocketFactory(getEvents(), getSocketMultiplexer());
 }
 

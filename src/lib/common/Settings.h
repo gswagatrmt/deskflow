@@ -108,6 +108,21 @@ public:
     inline static const auto Protocol = QStringLiteral("server/protocol");
     inline static const auto XdpRestoreToken = QStringLiteral("server/xdpRestoreToken");
   };
+  /// Settings for internet relay (cross-network KVM sharing).
+  struct Relay
+  {
+    inline static const auto Enabled = QStringLiteral("relay/enabled");
+    inline static const auto Host = QStringLiteral("relay/host");
+    inline static const auto Port = QStringLiteral("relay/port");
+    inline static const auto RoomCode = QStringLiteral("relay/roomCode");
+    /// "server" = this machine controls others; "client" = this machine is controlled;
+    /// "peer" = run both directions simultaneously (bidirectional).
+    inline static const auto Mode = QStringLiteral("relay/mode");
+    /// Room code for the reverse direction when Mode == "peer".
+    inline static const auto PeerRoomCode = QStringLiteral("relay/peerRoomCode");
+    inline static const int DefaultPort = 24801;
+    inline static const auto DefaultHost = QStringLiteral("relay.deskflow.io");
+  };
 
   // Enums types used in settings
   // The use of enum classes is not use for these

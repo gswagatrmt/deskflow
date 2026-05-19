@@ -1,0 +1,10 @@
+services:
+  deskflow-relay:
+    build: .
+    restart: unless-stopped
+    environment:
+      RELAY_PORT: "24801"
+      RELAY_ADMIN_PORT: "8080"
+    ports:
+      - "24801:24801"
+      - "8080:8080"
