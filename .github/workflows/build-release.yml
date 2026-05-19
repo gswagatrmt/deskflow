@@ -1,0 +1,449 @@
+# Standalone release workflow for the modified deskflow with internet relay support.
+# Builds exe (Windows), deb/rpm/flatpak (Linux), and dmg (macOS) packages.
+#
+# Triggers:
+#   - Push a version tag:  git tag v1.0.0 && git push origin v1.0.0
+#   - Push to master:      automatic "continuous" pre-release
+#   - Manual:              Actions → Build & Release → Run workflow
+
+name: Build & Release
+
+on:
+  push:
+    branches: [master]
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version_label:
+        description: "Package version label (e.g. 1.0.0)"
+        required: false
+        default: "continuous"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  PACKAGE_PREFIX: "deskflow"
+  PACKAGE_PATH: ./dist
+  # Skip tests for faster release builds (tests run in the CI workflow)
+  CMAKE_CONFIGURE: "cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -DSKIP_BUILD_TESTS=ON"
+
+jobs:
+  # ─────────────────────────── Windows ───────────────────────────────────────
+  windows:
+    name: ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.runs-on }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: "windows-x64"
+            runs-on: "windows-2022"
+            arch: "amd64"
+            vcpkg-triplet: x64-windows-release
+            qt-version: "6.10.2"
+            config-args: "-G Ninja"
+
+          - name: "windows-arm64"
+            runs-on: "windows-11-arm"
+            arch: "arm64"
+            vcpkg-triplet: arm64-windows
+            qt-version: "6.10.2"
+            config-args: "-G Ninja"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup VC++ environment
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: ${{ matrix.target.arch }}
+          spectre: true
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.target.qt-version }}
+          cache: true
+
+      - name: Build and cache vcpkg
+        id: vcpkg
+        uses: johnwason/vcpkg-action@v8
+        with:
+          pkgs: gtest openssl
+          extra-args: --classic --host-triplet=${{ matrix.target.vcpkg-triplet }}
+          triplet: ${{ matrix.target.vcpkg-triplet }}
+          token: ${{ github.token }}
+
+      - name: Get version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == *"tags/v"* ]]; then
+            VER=$(echo $GITHUB_REF | sed 's,refs/tags/v,,g')
+          elif [[ "${{ github.event.inputs.version_label }}" != "" ]]; then
+            VER="${{ github.event.inputs.version_label }}"
+          else
+            VER="continuous"
+          fi
+          echo "DESKFLOW_PACKAGE_VERSION=$VER" >> $GITHUB_ENV
+
+      - name: Install WiX
+        shell: pwsh
+        run: dotnet tool install --global wix --version 4.0.5
+
+      - name: Configure
+        run: ${{ env.CMAKE_CONFIGURE }} ${{ matrix.target.config-args }} ${{ steps.vcpkg.outputs.vcpkg-cmake-config }} -DPACKAGE_VERSION_LABEL="${{ env.DESKFLOW_PACKAGE_VERSION }}"
+
+      - name: Build & Package
+        shell: bash
+        run: cmake --build build --config Release -j8 --target package
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ env.PACKAGE_PREFIX }}-${{ matrix.target.name }}
+          path: build/deskflow[-_]*.*
+          if-no-files-found: error
+
+  # ─────────────────────────── macOS ─────────────────────────────────────────
+  macos:
+    name: ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.runs-on }}
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: "macos-arm64"
+            runs-on: macos-15
+            qt-version: "6.10.2"
+            arch: "arm64"
+            config-args: '-DCMAKE_OSX_ARCHITECTURES="arm64" -DCMAKE_OSX_DEPLOYMENT_TARGET=14'
+
+          - name: "macos-x64"
+            runs-on: macos-15-intel
+            qt-version: "6.9.3"
+            arch: "x86_64"
+            config-args: '-DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=12'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: brew install googletest openssl doxygen --quiet
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.target.qt-version }}
+          cache: true
+
+      - name: Get version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == *"tags/v"* ]]; then
+            VER=$(echo $GITHUB_REF | sed 's,refs/tags/v,,g')
+          elif [[ "${{ github.event.inputs.version_label }}" != "" ]]; then
+            VER="${{ github.event.inputs.version_label }}"
+          else
+            VER="continuous"
+          fi
+          echo "DESKFLOW_PACKAGE_VERSION=$VER" >> $GITHUB_ENV
+
+      - name: Configure
+        run: ${{ env.CMAKE_CONFIGURE }} ${{ matrix.target.config-args }} -DPACKAGE_VERSION_LABEL="${{ env.DESKFLOW_PACKAGE_VERSION }}"
+
+      - name: Build
+        run: cmake --build build --config Release -j8
+
+      - name: Package (with retry)
+        shell: bash
+        run: |
+          for i in $(seq 1 5); do
+            cmake --build build --config Release --target package && break
+            echo "Package attempt $i failed, retrying..."
+            sleep 2
+          done
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ env.PACKAGE_PREFIX }}-${{ matrix.target.name }}
+          path: build/deskflow[-_]*.*
+          if-no-files-found: error
+
+  # ────────────────────────── Linux (deb / rpm) ───────────────────────────────
+  linux:
+    name: ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.runs-on }}
+    container: ${{ matrix.target.container }}
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # ── Debian / Ubuntu ──
+          - name: "debian-x86_64"
+            runs-on: ubuntu-latest
+            container: debian:stable-slim
+            like: debian
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+          - name: "debian-arm64"
+            runs-on: ubuntu-24.04-arm
+            container: debian:stable-slim
+            like: debian
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+          - name: "ubuntu-2404-x86_64"
+            runs-on: ubuntu-latest
+            container: ubuntu:24.04
+            like: debian
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+          - name: "ubuntu-2404-arm64"
+            runs-on: ubuntu-24.04-arm
+            container: ubuntu:24.04
+            like: debian
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+          # ── Fedora (RPM) ──
+          - name: "fedora-43-x86_64"
+            runs-on: ubuntu-latest
+            container: fedora:43
+            like: fedora
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+          - name: "fedora-43-arm64"
+            runs-on: ubuntu-24.04-arm
+            container: fedora:43
+            like: fedora
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+          # ── openSUSE (RPM) ──
+          - name: "opensuse-x86_64"
+            runs-on: ubuntu-latest
+            container: opensuse/tumbleweed:latest
+            like: suse
+            config-args: "-G Ninja -DCMAKE_INSTALL_PREFIX=/usr"
+
+    steps:
+      - name: Install Git
+        shell: bash
+        run: |
+          if [ "${{ matrix.target.like }}" == "debian" ]; then
+            apt-get update -qq && apt-get install -y git
+          elif [ "${{ matrix.target.like }}" == "fedora" ]; then
+            dnf install -y git
+          elif [ "${{ matrix.target.like }}" == "suse" ]; then
+            zypper refresh && zypper install -y git
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          if [ "${{ matrix.target.like }}" == "debian" ]; then
+            apt-get update -qq
+            apt-get install -y \
+              cmake build-essential ninja-build \
+              xorg-dev libx11-dev libxtst-dev libssl-dev \
+              libglib2.0-dev libxkbfile-dev \
+              qt6-base-dev qt6-tools-dev \
+              libgtk-3-dev libgtest-dev libgmock-dev \
+              libei-dev libportal-dev help2man doxygen
+          elif [ "${{ matrix.target.like }}" == "fedora" ]; then
+            dnf install -y \
+              cmake make ninja-build gcc-c++ rpm-build openssl-devel \
+              glib2-devel libXtst-devel libxkbfile-devel \
+              qt6-qtbase-devel qt6-qttools-devel \
+              gtk3-devel gtest-devel gmock-devel \
+              libei-devel libportal-devel help2man doxygen
+          elif [ "${{ matrix.target.like }}" == "suse" ]; then
+            zypper refresh
+            zypper install -y --force-resolution \
+              cmake make ninja gcc-c++ rpm-build libopenssl-devel \
+              glib2-devel libXtst-devel libxkbfile-devel \
+              qt6-base-devel qt6-tools-devel qt6-linguist-devel \
+              gtk3-devel googletest-devel googlemock-devel \
+              libei-devel libportal-devel help2man doxygen
+          fi
+
+      - name: Get version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == *"tags/v"* ]]; then
+            VER=$(echo $GITHUB_REF | sed 's,refs/tags/v,,g')
+          elif [[ "${{ github.event.inputs.version_label }}" != "" ]]; then
+            VER="${{ github.event.inputs.version_label }}"
+          else
+            VER="continuous"
+          fi
+          echo "DESKFLOW_PACKAGE_VERSION=$VER" >> $GITHUB_ENV
+
+      - name: Configure
+        run: ${{ env.CMAKE_CONFIGURE }} ${{ matrix.target.config-args }} -DPACKAGE_VERSION_LABEL="${{ env.DESKFLOW_PACKAGE_VERSION }}"
+
+      - name: Build & Package
+        run: cmake --build build --config Release -j$(nproc) --target package
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ env.PACKAGE_PREFIX }}-${{ matrix.target.name }}
+          path: build/deskflow[-_]*.*
+          if-no-files-found: error
+
+  # ─────────────────────────── Flatpak ───────────────────────────────────────
+  flatpak:
+    name: flatpak-${{ matrix.arch }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      options: --privileged
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs-on: ubuntu-latest
+            arch: x86_64
+          - runs-on: ubuntu-24.04-arm
+            arch: aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Git safe dir
+        run: git config --global protocol.file.allow always
+
+      - name: Get version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == *"tags/v"* ]]; then
+            VER=$(echo $GITHUB_REF | sed 's,refs/tags/v,,g')
+          else
+            VER="continuous"
+          fi
+          echo "DESKFLOW_PACKAGE_VERSION=$VER" >> $GITHUB_ENV
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: deskflow-${{ env.DESKFLOW_PACKAGE_VERSION }}-linux-${{ matrix.arch }}.flatpak
+          manifest-path: deploy/linux/flatpak/org.deskflow.deskflow.yml
+          cache-key: flatpak-builder-${{ matrix.arch }}-2.0
+          arch: ${{ matrix.arch }}
+          upload-artifact: false
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ env.PACKAGE_PREFIX }}-flatpak-${{ matrix.arch }}
+          path: deskflow[-_]*.flatpak
+          if-no-files-found: error
+
+  # ─────────────────────── Collect & Create Release ──────────────────────────
+  release:
+    needs: [windows, macos, linux, flatpak]
+    if: always() && (needs.windows.result == 'success' || needs.macos.result == 'success' || needs.linux.result == 'success')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == *"tags/v"* ]]; then
+            VER=$(echo $GITHUB_REF | sed 's,refs/tags/v,,g')
+            echo "IS_RELEASE=true" >> $GITHUB_ENV
+          else
+            VER="${{ github.event.inputs.version_label || 'continuous' }}"
+            echo "IS_RELEASE=false" >> $GITHUB_ENV
+          fi
+          echo "DESKFLOW_PACKAGE_VERSION=$VER" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: packages/
+
+      - name: List packages
+        run: ls -lah packages/
+
+      - name: Generate checksums
+        run: |
+          cd packages/
+          sha256sum deskflow[-_]* > ../sums.txt
+          cat ../sums.txt
+
+      - name: Create GitHub Release (tagged)
+        if: contains(github.ref, '/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Deskflow ${{ env.DESKFLOW_PACKAGE_VERSION }} (with Internet Relay)"
+          body: |
+            ## Deskflow with Internet Relay Support
+
+            This release adds:
+            - **Internet KVM** — share keyboard & mouse across the internet, not just your local network
+            - **Bidirectional peer control** — any device can control any other device simultaneously
+            - Built-in relay socket support (native C++ integration)
+            - Node.js relay server (self-hostable)
+
+            ### Quick start
+            1. Deploy the relay server: `cd relay && node server.js` (or `docker compose up`)
+            2. Configure all devices with the same relay host + room code in **Preferences → Internet**
+
+            See `relay/README.md` for full setup instructions.
+          files: |
+            packages/deskflow[-_]*
+            sums.txt
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release (continuous)
+        if: "!contains(github.ref, '/tags/v')"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: "Deskflow continuous (Internet Relay)"
+          prerelease: true
+          body: |
+            Continuous build from the latest `master` commit.
+            Includes internet relay and bidirectional peer control.
+          files: |
+            packages/deskflow[-_]*
+            sums.txt
+          token: ${{ secrets.GITHUB_TOKEN }}
